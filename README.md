@@ -1,6 +1,7 @@
 # epi_plot
 
-Shiny interface for drawing Gantt plots dedicated to infection studies in hospital settings.
+Shiny interface for drawing Gantt plots dedicated to infection studies in hospital settings.  
+This tool is still under development.
 
 ## Install
 You only need to have Shiny installed and loaded in your R session.  
@@ -37,3 +38,6 @@ Save your data as CSV.
 ## Screenshots
 
 ![screenshot](images/epi_plot.png)
+
+Use the difference options to select and filter your data.  
+Then you can save you plot with the download function.
