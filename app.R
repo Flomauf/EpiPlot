@@ -57,6 +57,7 @@ ui <- fluidPage(
   
   sidebarLayout(
     sidebarPanel(
+      style = "height: 90vh; overflow-y: auto;", # Scroll bar
       fileInput("Data", "Data file", accept=c("text/csv", "text/txt")),
       sliderInput("incubation", label = "Incubation period (days)", min = 0, 
                   max = 5, value = 4, step = 1),
@@ -82,7 +83,7 @@ ui <- fluidPage(
       textInput("saveName", "Filename"),
       textInput("saveHeight", "Height", value = 1024),
       textInput("saveWidth", "Width", value = 1024),
-      actionButton("saveButton", "Save")
+      downloadButton("dlButton", "Download")
       ),
     
     mainPanel(
@@ -205,12 +206,12 @@ server <- function(input, output, session) {
     return(table)
       })
   
-  observeEvent(input$saveButton, {
-    ggsave("test.png",
-           width = as.numeric(input$saveWidth),
-           height = as.numeric(input$saveHeight),
-           units="px")
-  })
+  output$saveButton <- downloadHandler(filename = function(){paste("timeline",'.png',sep='')},
+                                       content = function(file){
+                                         png(file)
+                                         print(plot)
+                                         dev.off()
+                                         })
   
 }
 
