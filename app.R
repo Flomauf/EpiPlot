@@ -1,7 +1,7 @@
-library(shiny)
-library(ggplot2)
-library(dplyr)
-library(forcats)
+# Load or install packages
+list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
 
 hosp_or_comm <- function(table, timelapse){
   # Define if infection is community or hospital acquired.
@@ -70,6 +70,8 @@ ui <- fluidPage(
                                                      "NGS cluster" = "cluster")),
       selectInput("plotColor", "Color", list("Unit" = "unit",
                                              "Infection" = "infection")),
+      pickerInput("patientPicker", "Select patients", choices = "",
+                  multiple = TRUE, options = list(`actions-box` = TRUE)),
       hr(),
       
       h3("Strains clusters"),
@@ -80,9 +82,10 @@ ui <- fluidPage(
       hr(),
       
       h3("Output"),
-      textInput("saveName", "Filename"),
-      textInput("saveHeight", "Height", value = 1024),
-      textInput("saveWidth", "Width", value = 1024),
+      sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
+                  max = 4096, step = 1024),
+      sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
+                max = 4096, step = 1024),
       downloadButton("dlButton", "Download")
       ),
     
@@ -136,11 +139,14 @@ server <- function(input, output, session) {
       pol_data$patient <- factor(pol_data$patient, levels = unique(data$patient[order(data$cluster)]))
     }
     
+    updatePickerInput(session, "patientPicker", choices = levels(factor(pol_data$patient)),
+                      selected = levels(factor(pol_data$patient)))
+    
     return(pol_data)
   })
   
-  # Display plot when data uploaded
-  output$timeline <- renderPlot({
+  # Plotting function
+  draw_plot <- reactive({
     
     # Return nothing if no data loaded
     if (is.null(input$Data))
@@ -152,8 +158,10 @@ server <- function(input, output, session) {
     # Add time on date to have period of time for one-day visits
     # Add in seconds (86399 = 23h59m59s, 43200=12h00m00s)
     plot_data <- plot_data %>% mutate(out_date = out_date + 86399, 
-                              sampling = sampling + 43200)
+                                      sampling = sampling + 43200)
     
+    # Keep only selected patients
+    plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
     
     # Define best segment and dot size depending on patient number (with minimums)
     line_size <- max(3, 25-length(levels(as.factor(plot_data$patient))))
@@ -191,9 +199,12 @@ server <- function(input, output, session) {
       plot <- plot + geom_point(aes(x=sampling, y=patient), colour=input$ClustColor, size=input$DotSize)
     }
     
-    plot
-    })
+    return(plot)
+  })
   
+  # Display plot when data uploaded
+  output$timeline <- renderPlot({draw_plot()})
+    
   output$table <- renderTable({
     
     if (is.null(input$Data))
@@ -206,11 +217,12 @@ server <- function(input, output, session) {
     return(table)
       })
   
-  output$saveButton <- downloadHandler(filename = function(){paste("timeline",'.png',sep='')},
+  output$dlButton <- downloadHandler(filename = function(){"timeline.png"},
                                        content = function(file){
-                                         png(file)
-                                         print(plot)
-                                         dev.off()
+                                         ggsave(file, draw_plot(), device = png,
+                                                width = as.numeric(input$saveWidth),
+                                                height = as.numeric(input$saveHeight),
+                                                units = "px")
                                          })
   
 }
