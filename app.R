@@ -163,11 +163,12 @@ server <- function(input, output, session) {
     
     # Main plot
     plot <- ggplot(plot_data, aes(x=in_date, xend=out_date, y=patient, yend=patient, color=color)) +
-      geom_segment(size=line_size) +
+      geom_segment(linewidth=line_size) +
       theme_bw()+ #use ggplot theme with black gridlines and white background
       theme(axis.title = element_blank(), legend.position = "bottom",
             legend.key.size = unit(1.5, 'cm'),
             legend.text = element_text(size=15),
+            legend.title = element_blank(),
             axis.text = element_text(size=text_size))
     
     if (input$checkCluster == TRUE){
@@ -180,7 +181,7 @@ server <- function(input, output, session) {
           for (line in 1:(nrow(df)-1)){
             plot <- plot + geom_segment(x=df[line,"sampling"], xend=df[line+1,"sampling"], 
                                         y=df[line,"patient"], yend=df[line+1,"patient"],
-                                        color=input$ClustColor, size=input$SegSize)
+                                        color=input$ClustColor, linewidth=input$SegSize)
           }
         }
       }
