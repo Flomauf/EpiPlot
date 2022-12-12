@@ -64,7 +64,8 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       style = "height: 90vh; overflow-y: auto;", # Scroll bar
-      fileInput("Data", "Data file", accept=c("text/csv", "text/txt")),
+      h3("Data"),
+      fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
       sliderInput("incubation", label = "Incubation period (days)", min = 0, 
                   max = 5, value = 4, step = 1),
       
@@ -82,9 +83,8 @@ ui <- fluidPage(
       
       h3("Strains clusters"),
       checkboxInput("checkCluster", label = "Display", value = FALSE),
-      numericInput("DotSize", label = "Dot", value = 1),
+      numericInput("DotSize", label = "Dot", value = 4),
       numericInput("SegSize", label = "Segment", value = 1),
-      textInput("ClustColor", label = "Color", value = "black"),
       hr(),
       
       h3("Output"),
@@ -96,9 +96,11 @@ ui <- fluidPage(
       ),
     
     mainPanel(
-      plotOutput("timeline"),
-      tableOutput("table")
-      )
+      # Tabs
+      tabsetPanel(type = "tabs",
+                  tabPanel("Table",tableOutput("table")),
+                  tabPanel("Plot", plotOutput("timeline", brush = "plot_brush", dblclick = "db_click")))
+    )
   )
 )
 
@@ -117,18 +119,44 @@ server <- function(input, output, session) {
                               sampling = as.POSIXct(sampling,))
 
     # Update date range widget
-    updateDateRangeInput(session, "DateRange", start=min(table$in_date), end=max(table$out_date))
+    updateDateRangeInput(session, "DateRange", start=min(table$in_date), 
+                         end=max(table$out_date))
 
     return(table)
   })
+
+  # Filter dates by brushing the plot
+  filtered_data <- reactive({
+    fil_data <- get_data()
+    brush_data <- input$plot_brush
+    min_date <- brush_data$xmin
+    max_date <- brush_data$xmax
+    db_click <- input$db_click
+    
+    if (!is.null(min_date)){
+      fil_data <- fil_data[(which(fil_data$in_date>=min_date)),]
+      fil_data <- fil_data[(which(fil_data$out_date<=max_date)),]
+      session$resetBrush("plot_brush")
+      updateDateRangeInput(session, "DateRange", start=as.POSIXct(min_date, origin="1970-01-01"), 
+                           end=as.POSIXct(max_date, origin="1970-01-01"))
+    }
+    
+    if (!is.null(db_click)){
+      updateDateRangeInput(session, "DateRange", start=min(fil_data$in_date), 
+                           end=max(fil_data$out_date))
+    }
+    
+    
+    # Filter by date
+    fil_data <- fil_data[(which(fil_data$in_date>=as.POSIXct(input$DateRange[1]))),]
+    fil_data <- fil_data[(which(fil_data$out_date<=as.POSIXct(input$DateRange[2]))),]
+    
+    return(fil_data)
+    })
   
   # Filtering data
   polished_data <- reactive({
-    pol_data <- get_data()
-    
-    # Filter by date
-    pol_data <- pol_data[(which(pol_data$in_date>=as.POSIXct(input$DateRange[1]))),]
-    pol_data <- pol_data[(which(pol_data$out_date<=as.POSIXct(input$DateRange[2]))),]
+    pol_data <- filtered_data()
     
     # Add community/hospital column
     pol_data <- hosp_or_comm(pol_data, input$incubation)
@@ -170,7 +198,7 @@ server <- function(input, output, session) {
     plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
     
     # Define best segment and dot size depending on patient number (with minimums)
-    line_size <- max(3, 25-length(levels(as.factor(plot_data$patient))))
+    line_size <- max(3, 20-length(levels(as.factor(plot_data$patient))))
     text_size <- max(10, 25-length(levels(as.factor(plot_data$patient))))
     
     # Define colors group
@@ -196,13 +224,13 @@ server <- function(input, output, session) {
           for (line in 1:(nrow(df)-1)){
             plot <- plot + geom_segment(x=df[line,"sampling"], xend=df[line+1,"sampling"], 
                                         y=df[line,"patient"], yend=df[line+1,"patient"],
-                                        color=input$ClustColor, linewidth=input$SegSize)
+                                        color="black", linewidth=input$SegSize)
           }
         }
       }
       
       # Add sampling date
-      plot <- plot + geom_point(aes(x=sampling, y=patient), colour=input$ClustColor, size=input$DotSize)
+      plot <- plot + geom_point(aes(x=sampling, y=patient), colour="black", size=input$DotSize)
     }
     
     return(plot)
