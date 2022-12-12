@@ -1,5 +1,6 @@
 # Load or install packages
-list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets")
+list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets",
+                      "svglite")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -8,6 +9,7 @@ library(shinyWidgets)
 library(dplyr)
 library(ggplot2)
 library(forcats)
+library(svglite)
 
 hosp_or_comm <- function(table, timelapse){
   # Define if infection is community or hospital acquired.
@@ -60,46 +62,56 @@ hosp_or_comm <- function(table, timelapse){
 # Define UI ----
 ui <- fluidPage(
   titlePanel("EpiPlot"),
-  
-  sidebarLayout(
-    sidebarPanel(
-      style = "height: 90vh; overflow-y: auto;", # Scroll bar
-      h3("Data"),
-      fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
-      sliderInput("incubation", label = "Incubation period (days)", min = 0, 
-                  max = 5, value = 4, step = 1),
+  tabsetPanel(
+    tabPanel("Table", fluid = TRUE,
+       sidebarLayout(
+         sidebarPanel(
+           style = "height: 90vh; overflow-y: auto;", # Scroll bar
+           h3("Data"),
+           fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
+           sliderInput("incubation", label = "Incubation period (days)", min = 0, 
+                       max = 5, value = 4, step = 1),
+           dateRangeInput("DateRange", "Dates range")),
+        mainPanel(
+          tableOutput("table"))
       
-      h3("Filters"),
-      dateRangeInput("DateRange", "Dates range"),
-      selectInput("plotOrder", "Samples order", list("Patients" = "patients",
-                                                     "Admission" = "in_date",
-                                                     "First MRSA" = "sampling",
-                                                     "NGS cluster" = "cluster")),
-      selectInput("plotColor", "Color", list("Unit" = "unit",
-                                             "Infection" = "infection")),
-      pickerInput("patientPicker", "Select patients", choices = "",
-                  multiple = TRUE, options = list(`actions-box` = TRUE)),
-      hr(),
-      
-      h3("Strains clusters"),
-      checkboxInput("checkCluster", label = "Display", value = FALSE),
-      numericInput("DotSize", label = "Dot", value = 4),
-      numericInput("SegSize", label = "Segment", value = 1),
-      hr(),
-      
-      h3("Output"),
-      sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
-                  max = 4096, step = 1024),
-      sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
-                max = 4096, step = 1024),
-      downloadButton("dlButton", "Download")
-      ),
-    
-    mainPanel(
-      # Tabs
-      tabsetPanel(type = "tabs",
-                  tabPanel("Table",tableOutput("table")),
-                  tabPanel("Plot", plotOutput("timeline", brush = "plot_brush", dblclick = "db_click")))
+      )
+    ),
+    tabPanel("Plot", fluid = TRUE,
+             sidebarLayout(
+               sidebarPanel(
+                 style = "height: 90vh; overflow-y: auto;", # Scroll bar
+                 h3("Filters"),
+                 selectInput("plotOrder", "Samples order", list("Patients" = "patients",
+                                                                "Admission" = "in_date",
+                                                                "First MRSA" = "sampling",
+                                                                "NGS cluster" = "cluster")),
+                 selectInput("plotColor", "Color", list("Unit" = "unit",
+                                                        "Infection" = "infection")),
+                 pickerInput("patientPicker", "Select patients", choices = "",
+                             multiple = TRUE, options = list(`actions-box` = TRUE)),
+                 hr(),
+                 
+                 h3("Strains clusters"),
+                 checkboxInput("checkCluster", label = "Display", value = FALSE),
+                 numericInput("DotSize", label = "Dot", value = 4),
+                 numericInput("SegSize", label = "Segment", value = 1),
+                 checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
+                 hr(),
+                 
+                 h3("Output"),
+                 sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
+                             max = 4096, step = 1024),
+                 sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
+                             max = 4096, step = 1024),
+                 radioButtons("typeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
+                              choiceValues = c("png", "pdf", "svg"), inline = TRUE),
+                 downloadButton("dlButton", "Download")
+               ),
+            mainPanel(
+              plotOutput("timeline", brush = "plot_brush", dblclick = "db_click")
+        )
+      )
     )
   )
 )
@@ -228,9 +240,14 @@ server <- function(input, output, session) {
           }
         }
       }
-      
       # Add sampling date
       plot <- plot + geom_point(aes(x=sampling, y=patient), colour="black", size=input$DotSize)
+      
+      # Add cluster label
+      if (input$checkClusterLabel == TRUE){
+        unique_df <- 
+        plot <- plot + geom_text(label=plot_data$cluster)
+      }
     }
     
     return(plot)
@@ -251,9 +268,9 @@ server <- function(input, output, session) {
     return(table)
       })
   
-  output$dlButton <- downloadHandler(filename = function(){"timeline.png"},
+  output$dlButton <- downloadHandler(filename = function(){paste("timeline", input$typeOut, sep = ".")},
                                        content = function(file){
-                                         ggsave(file, draw_plot(), device = png,
+                                         ggsave(file, draw_plot(), device = input$typeOut,
                                                 width = as.numeric(input$saveWidth),
                                                 height = as.numeric(input$saveHeight),
                                                 units = "px")
