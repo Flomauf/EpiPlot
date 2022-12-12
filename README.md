@@ -7,10 +7,11 @@ This tool is still under development.
 You only need to have Shiny installed and loaded in your R session.  
 ```
 install.packages("shiny")
-library(shiny)
+install.packages("shinyWidgets")
 ```
 Then the easiest way to use Epi_plot is to start it through GitHub.  
 ```
+library(shiny)
 runGitHub("epi_plot", "Mauffrey")
 ```
 
@@ -34,6 +35,8 @@ sampling = the date of the first positive sampling (should be the same value for
 cluster = genetic cluster (should be the same value for all line of the same patient)
 
 Save your data as CSV.
+
+You can use the example.csv file provided to test the tool.
 
 ## Screenshots
 
