@@ -5,6 +5,9 @@ if(length(new.packages)) install.packages(new.packages)
 
 library(shiny)
 library(shinyWidgets)
+library(dplyr)
+library(ggplot2)
+library(forcats)
 
 hosp_or_comm <- function(table, timelapse){
   # Define if infection is community or hospital acquired.
@@ -139,7 +142,7 @@ server <- function(input, output, session) {
     } else if (order_var == "sampling"){
       pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$sampling)]))
     } else if (order_var == "cluster"){
-      pol_data$patient <- factor(pol_data$patient, levels = unique(data$patient[order(data$cluster)]))
+      pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$cluster)]))
     }
     
     updatePickerInput(session, "patientPicker", choices = levels(factor(pol_data$patient)),
