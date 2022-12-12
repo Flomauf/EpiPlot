@@ -3,6 +3,9 @@ list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
+library(shiny)
+library(shinyWidgets)
+
 hosp_or_comm <- function(table, timelapse){
   # Define if infection is community or hospital acquired.
   # Add column in table and return the new table
