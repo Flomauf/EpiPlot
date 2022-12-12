@@ -11,7 +11,6 @@ install.packages("shinyWidgets")
 ```
 Then the easiest way to use Epi_plot is to start it through GitHub.  
 ```
-library(shiny)
 runGitHub("epi_plot", "Mauffrey")
 ```
 
