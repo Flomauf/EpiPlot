@@ -58,6 +58,37 @@ hosp_or_comm <- function(table, timelapse){
   return(table)
 }
 
+add_time <- function(table){
+  # Add time depending on previous line (if some date overlay)
+  new_table <- data.frame()
+  for (patient in levels(factor(table$patient))){
+    pat_table <- table[which(table$patient==patient),]
+    
+    # If only one date
+    if (nrow(pat_table) == 1){
+      pat_table$out_date <- pat_table$out_date + 86399
+      pat_table$sampling <- pat_table$sampling + 43200
+    
+    # For other patients tables  
+    } else {
+      for (line in 2:nrow(pat_table)){
+        if (pat_table[line, "in_date"] == pat_table[line-1, "out_date"]){
+          pat_table[line, "in_date"] <- pat_table[line, "in_date"] + 43200
+          pat_table[line-1, "out_date"] <- pat_table[line-1, "out_date"] + 43200
+        } else {
+          pat_table[line-1, "out_date"] <- pat_table[line-1, "out_date"] + 86399
+        }
+        pat_table[line-1, "sampling"] <- pat_table[line-1, "sampling"] + 43200
+      }
+      # Changing last row out_date
+      pat_table[nrow(pat_table), "out_date"] <- pat_table[nrow(pat_table), "out_date"] + 86399
+      pat_table[line, "sampling"] <- pat_table[line, "sampling"] + 43200
+    }
+    
+    new_table <- rbind.data.frame(new_table, pat_table)
+  }
+  return(new_table)
+}    
 
 # Define UI ----
 ui <- fluidPage(
@@ -109,7 +140,8 @@ ui <- fluidPage(
                  downloadButton("dlButton", "Download")
                ),
             mainPanel(
-              plotOutput("timeline", brush = "plot_brush", dblclick = "db_click")
+              plotOutput("timeline", brush = "plot_brush", dblclick = "db_click"),
+              plotOutput("frequency")
         )
       )
     )
@@ -192,7 +224,7 @@ server <- function(input, output, session) {
   })
   
   # Plotting function
-  draw_plot <- reactive({
+  draw_gantt <- reactive({
     
     # Return nothing if no data loaded
     if (is.null(input$Data))
@@ -203,8 +235,7 @@ server <- function(input, output, session) {
     
     # Add time on date to have period of time for one-day visits
     # Add in seconds (86399 = 23h59m59s, 43200=12h00m00s)
-    plot_data <- plot_data %>% mutate(out_date = out_date + 86399, 
-                                      sampling = sampling + 43200)
+    plot_data <- add_time(plot_data)
     
     # Keep only selected patients
     plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
@@ -253,9 +284,50 @@ server <- function(input, output, session) {
     return(plot)
   })
   
-  # Display plot when data uploaded
-  output$timeline <- renderPlot({draw_plot()})
+  # Plotting function
+  draw_frequency <- reactive({
     
+    # Return nothing if no data loaded
+    if (is.null(input$Data))
+      return(NULL)
+    
+    # Import filtered data
+    plot_data <- polished_data()
+
+    # Keep only selected patients
+    plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
+    
+    # Transform data for plotting
+    plot_data2 <- data.frame()
+    
+    for (line in 1:nrow(plot_data)){
+      days <- seq(plot_data[line,"in_date"], plot_data[line,"out_date"], by="days")
+      subtable <- data.frame(day=days, 
+                             unit=rep(plot_data[line,"unit"], length(days)),
+                             cluster=rep(plot_data[line,"cluster"], length(days)),
+                             infection=rep(plot_data[line,"infection"], length(days))
+      )
+      plot_data2 <- rbind.data.frame(plot_data2, subtable)
+    }
+
+    # Define text size
+    text_size <- max(10, 25-length(levels(as.factor(plot_data$patient))))
+    color <- plot_data2[,input$plotColor]
+    
+    # Main plot
+    plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram()
+    plot <- plot + theme_bw() + theme(axis.title = element_blank(), 
+                                      legend.position = "none",
+                                      axis.text = element_text(size=text_size))
+    
+    return(plot)
+  })
+  
+  # Display Gantt plot and frequency plot
+  output$timeline <- renderPlot({draw_gantt()})
+  output$frequency <- renderPlot({draw_frequency()})
+  
+  # Display table
   output$table <- renderTable({
     
     if (is.null(input$Data))
@@ -268,9 +340,10 @@ server <- function(input, output, session) {
     return(table)
       })
   
+  # Saving button Gantt plot
   output$dlButton <- downloadHandler(filename = function(){paste("timeline", input$typeOut, sep = ".")},
                                        content = function(file){
-                                         ggsave(file, draw_plot(), device = input$typeOut,
+                                         ggsave(file, draw_gantt(), device = input$typeOut,
                                                 width = as.numeric(input$saveWidth),
                                                 height = as.numeric(input$saveHeight),
                                                 units = "px")
