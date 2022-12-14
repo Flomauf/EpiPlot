@@ -132,6 +132,10 @@ ui <- fluidPage(
                  numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1),
                  hr(),
                  
+                 h3("Frequency table"),
+                 numericInput("freqBins", label = "Bins", value = 30, step = 1),
+                 hr(),
+                 
                  h3("Output"),
                  sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
                              max = 4096, step = 1024),
@@ -142,7 +146,7 @@ ui <- fluidPage(
                  downloadButton("dlButton", "Download")
                ),
             mainPanel(
-              plotOutput("timeline", brush = "plot_brush", dblclick = "db_click"),
+              plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click"),
               plotOutput("frequency")
         )
       )
@@ -171,6 +175,7 @@ server <- function(input, output, session) {
     return(table)
   })
 
+
   # Filter dates by brushing the plot
   filtered_data <- reactive({
     fil_data <- get_data()
@@ -182,7 +187,6 @@ server <- function(input, output, session) {
     if (!is.null(min_date)){
       fil_data <- fil_data[(which(fil_data$in_date>=min_date)),]
       fil_data <- fil_data[(which(fil_data$out_date<=max_date)),]
-      session$resetBrush("plot_brush")
       updateDateRangeInput(session, "DateRange", start=as.POSIXct(min_date, origin="1970-01-01"), 
                            end=as.POSIXct(max_date, origin="1970-01-01"))
     }
@@ -191,7 +195,6 @@ server <- function(input, output, session) {
       updateDateRangeInput(session, "DateRange", start=min(fil_data$in_date), 
                            end=max(fil_data$out_date))
     }
-    
     
     # Filter by date
     fil_data <- fil_data[(which(fil_data$in_date>=as.POSIXct(input$DateRange[1]))),]
@@ -315,12 +318,12 @@ server <- function(input, output, session) {
       plot_data2 <- rbind.data.frame(plot_data2, subtable)
     }
 
-    # Define text size
+    # Define text size and color
     text_size <- max(10, 25-length(levels(as.factor(plot_data$patient))))
     color <- plot_data2[,input$plotColor]
     
     # Main plot
-    plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram()
+    plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram(bins=input$freqBins, color="black")
     plot <- plot + theme_bw() + theme(axis.title = element_blank(), 
                                       legend.position = "none",
                                       axis.text = element_text(size=text_size))
