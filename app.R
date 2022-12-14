@@ -128,6 +128,8 @@ ui <- fluidPage(
                  numericInput("DotSize", label = "Dot", value = 4),
                  numericInput("SegSize", label = "Segment", value = 1),
                  checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
+                 numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
+                 numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1),
                  hr(),
                  
                  h3("Output"),
@@ -273,11 +275,14 @@ server <- function(input, output, session) {
       }
       # Add sampling date
       plot <- plot + geom_point(aes(x=sampling, y=patient), colour="black", size=input$DotSize)
-      
+
       # Add cluster label
       if (input$checkClusterLabel == TRUE){
-        unique_df <- 
-        plot <- plot + geom_text(label=plot_data$cluster)
+        plot <- plot + geom_text(aes(x=sampling, y=patient), 
+                                  label=plot_data$cluster,
+                                  color="black",
+                                  nudge_y = input$clustLabelNudge, 
+                                  size=input$clustLabelText)
       }
     }
     
