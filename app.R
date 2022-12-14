@@ -228,7 +228,7 @@ server <- function(input, output, session) {
     return(pol_data)
   })
   
-  # Plotting function
+  # Gantt plot
   draw_gantt <- reactive({
     
     # Return nothing if no data loaded
@@ -292,7 +292,7 @@ server <- function(input, output, session) {
     return(plot)
   })
   
-  # Plotting function
+  # Frequency plot
   draw_frequency <- reactive({
     
     # Return nothing if no data loaded
