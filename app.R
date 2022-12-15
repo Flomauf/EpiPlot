@@ -1,17 +1,20 @@
-# Load or install packages
+# Install packages if not present
 list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets",
-                      "svglite")
+                      "svglite", "shinydashboard")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
+# Load required packages
 library(shiny)
 library(shinyWidgets)
 library(dplyr)
 library(ggplot2)
 library(forcats)
 library(svglite)
+library(shinydashboard)
 
-hosp_or_comm <- function(table, timelapse){
+##### Custom functions for EpiPlot #######
+hosp_or_comm <- function(table, timelapse, community){
   # Define if infection is community or hospital acquired.
   # Add column in table and return the new table
   table <- cbind.data.frame(table, infection=rep("", nrow(table)))
@@ -55,7 +58,11 @@ hosp_or_comm <- function(table, timelapse){
     }
   }
   
-  return(table)
+  if (community == TRUE){
+    return(table)
+  } else {
+    return(table[which(table$infection=="Hospital"),])
+  }
 }
 
 add_time <- function(table){
@@ -76,12 +83,12 @@ add_time <- function(table){
           pat_table[line, "in_date"] <- pat_table[line, "in_date"] + 43200
           pat_table[line-1, "out_date"] <- pat_table[line-1, "out_date"] + 43200
         } else {
-          pat_table[line-1, "out_date"] <- pat_table[line-1, "out_date"] + 86399
+          pat_table[line-1, "out_date"] <- pat_table[line-1, "out_date"] + 86400
         }
         pat_table[line-1, "sampling"] <- pat_table[line-1, "sampling"] + 43200
       }
       # Changing last row out_date
-      pat_table[nrow(pat_table), "out_date"] <- pat_table[nrow(pat_table), "out_date"] + 86399
+      pat_table[nrow(pat_table), "out_date"] <- pat_table[nrow(pat_table), "out_date"] + 86400
       pat_table[line, "sampling"] <- pat_table[line, "sampling"] + 43200
     }
     
@@ -90,71 +97,91 @@ add_time <- function(table){
   return(new_table)
 }    
 
-# Define UI ----
-ui <- fluidPage(
-  titlePanel("EpiPlot"),
-  tabsetPanel(
-    tabPanel("Table", fluid = TRUE,
-       sidebarLayout(
-         sidebarPanel(
-           style = "height: 90vh; overflow-y: auto;", # Scroll bar
-           h3("Data"),
-           fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
-           sliderInput("incubation", label = "Incubation period (days)", min = 0, 
-                       max = 5, value = 4, step = 1),
-           dateRangeInput("DateRange", "Dates range")),
-        mainPanel(
-          tableOutput("table"))
+##### Shiny code for EpiPlot #######
+# UI
+ui <- dashboardPage(
+  # Header
+  dashboardHeader(title = "EpiPlot"),
+  
+  # Side bar menu
+  dashboardSidebar(
+    sidebarMenu(
+      id = "SideBar",
       
+      menuItem("Table", tabName = "table", icon = icon("dashboard")),
+      conditionalPanel(
+        condition = "input.SideBar == 'table'", 
+          fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
+          sliderInput("incubation", label = "Incubation period (days)", min = 0, 
+                      max = 5, value = 4, step = 1),
+          dateRangeInput("DateRange", "Dates range"),
+          checkboxInput("DisplayCommunity", 
+                        label = "Display community acquired", 
+                        value = TRUE)
+                      ),
+      
+      menuItem("Plots", tabName = "plots", icon = icon("th")),
+      conditionalPanel(
+        condition = "input.SideBar == 'plots'",
+        h3("Filters"),
+        selectInput("plotOrder", "Samples order", list("Patients" = "patients",
+                                                       "Admission" = "in_date",
+                                                       "First MRSA" = "sampling",
+                                                       "NGS cluster" = "cluster")),
+        selectInput("plotColor", "Color", list("Unit" = "unit",
+                                               "Infection" = "infection")),
+        pickerInput("patientPicker", "Select patients", choices = "",
+                    multiple = TRUE, options = list(`actions-box` = TRUE)),
+        hr(),
+        
+        h3("Strains clusters"),
+        checkboxInput("checkCluster", label = "Display", value = FALSE),
+        numericInput("DotSize", label = "Dot", value = 4),
+        numericInput("SegSize", label = "Segment", value = 1),
+        checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
+        numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
+        numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1),
+        hr(),
+        
+        h3("Frequency table"),
+        numericInput("freqBins", label = "Bins", value = 30, step = 1),
+        
+        h3("Output"),
+        sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
+                    max = 4096, step = 1024),
+        sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
+                    max = 4096, step = 1024),
+        radioButtons("typeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
+                     choiceValues = c("png", "pdf", "svg"), inline = TRUE),
+        downloadButton("dlButton", "Download")
       )
-    ),
-    tabPanel("Plot", fluid = TRUE,
-             sidebarLayout(
-               sidebarPanel(
-                 style = "height: 90vh; overflow-y: auto;", # Scroll bar
-                 h3("Filters"),
-                 selectInput("plotOrder", "Samples order", list("Patients" = "patients",
-                                                                "Admission" = "in_date",
-                                                                "First MRSA" = "sampling",
-                                                                "NGS cluster" = "cluster")),
-                 selectInput("plotColor", "Color", list("Unit" = "unit",
-                                                        "Infection" = "infection")),
-                 pickerInput("patientPicker", "Select patients", choices = "",
-                             multiple = TRUE, options = list(`actions-box` = TRUE)),
-                 hr(),
-                 
-                 h3("Strains clusters"),
-                 checkboxInput("checkCluster", label = "Display", value = FALSE),
-                 numericInput("DotSize", label = "Dot", value = 4),
-                 numericInput("SegSize", label = "Segment", value = 1),
-                 checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
-                 numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
-                 numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1),
-                 hr(),
-                 
-                 h3("Frequency table"),
-                 numericInput("freqBins", label = "Bins", value = 30, step = 1),
-                 hr(),
-                 
-                 h3("Output"),
-                 sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
-                             max = 4096, step = 1024),
-                 sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
-                             max = 4096, step = 1024),
-                 radioButtons("typeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
-                              choiceValues = c("png", "pdf", "svg"), inline = TRUE),
-                 downloadButton("dlButton", "Download")
-               ),
-            mainPanel(
-              plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click"),
-              plotOutput("frequency")
-        )
+    )
+  ),
+  
+  # Body
+  dashboardBody(
+    tabItems(
+      # Table loading tab
+      tabItem(tabName = "table",
+              fluidRow(column(1, valueBoxOutput("BoxPatients", width=20)),
+                       column(1, valueBoxOutput("BoxCluster", width=20)),
+                       column(1, valueBoxOutput("BoxUnits", width=20))),
+              tableOutput("table")
+              ),
+      
+      # Plots tab
+      tabItem(tabName = "plots",
+              fluidRow(
+                "Click and drag on area to zoom in. Double click to zoom out",
+                plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click"),
+                plotOutput("frequency")
+              )
       )
     )
   )
 )
 
-# Define server logic ----
+# Server
 server <- function(input, output, session) {
   
   # Load table
@@ -208,7 +235,7 @@ server <- function(input, output, session) {
     pol_data <- filtered_data()
     
     # Add community/hospital column
-    pol_data <- hosp_or_comm(pol_data, input$incubation)
+    pol_data <- hosp_or_comm(pol_data, input$incubation, input$DisplayCommunity)
     
     # Changing samples order for plot
     order_var <- input$plotOrder
@@ -222,8 +249,31 @@ server <- function(input, output, session) {
       pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$cluster)]))
     }
     
+    # Update patient picker widget
     updatePickerInput(session, "patientPicker", choices = levels(factor(pol_data$patient)),
                       selected = levels(factor(pol_data$patient)))
+    
+    # Update information boxes
+    output$BoxPatients <- renderValueBox({
+      valueBox(
+        length(levels(factor(pol_data$patient))),
+        "Patients",
+        icon = icon("head-side-mask",class="sharp", lib = "font-awesome"),
+        color = "yellow")})
+    
+    output$BoxCluster <- renderValueBox({
+      valueBox(
+        length(levels(factor(pol_data$cluster))),
+        "Cluster",
+        icon = icon("circle-nodes", lib = "font-awesome"),
+        color = "blue")})
+    
+    output$BoxUnits <- renderValueBox({
+      valueBox(
+        length(levels(factor(pol_data$patient))),
+        "Units",
+        icon = icon("hospital", lib = "font-awesome"),
+        color = "red")})
     
     return(pol_data)
   })
