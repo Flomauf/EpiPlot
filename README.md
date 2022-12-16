@@ -34,6 +34,8 @@ out_date = the date the patient left the unit
 sampling = the date of the first positive sampling (should be the same value for all line of the same patient)
 cluster = genetic cluster (should be the same value for all line of the same patient)
 
+Any additional column with categorical data (e.g. sex) will be integrated and will be available for sample classification in the plots. 
+
 ## How to use
 
 In the first tab, use the "Browse" button to load your data. You table should immediatly appear as well as statistics boxes. In this tab, you can change the incubation period (to declare an infection as hospital or community acquired) and the dates range. This will directly modify your table as well as the differents plots in the other tabs.
