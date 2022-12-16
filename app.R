@@ -107,13 +107,10 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       id = "SideBar",
-      menuItem("Table", tabName = "table", icon = icon("dashboard")),
-      menuItem("Gantt", tabName = "gantt", icon = icon("th")),
-      menuItem("Frequency", tabName = "frequency", icon = icon("dashboard")),
-      fluidRow(column(10, offset=1,
-                      valueBoxOutput("BoxPatients", width = 12),
-                      valueBoxOutput("BoxCluster", width = 12),
-                      valueBoxOutput("BoxUnits", width = 12)))
+      menuItem("Table", tabName = "table", icon = icon("table")),
+      menuItem("Gantt", tabName = "gantt", icon = icon("chart-gantt")),
+      menuItem("Frequency", tabName = "frequency", icon = icon("chart-column"))
+
     )
   ),
   
@@ -123,13 +120,22 @@ ui <- dashboardPage(
       ########## Table loading tab
       tabItem(tabName = "table",
               box(width = 2,
+                  p("Load table", style="font-size:25px"),
                   fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
+                  hr(),
+                  p("Parameters", style="font-size:25px"),
                   sliderInput("incubation", label = "Incubation period (days)", min = 0, 
                               max = 5, value = 4, step = 1),
                   dateRangeInput("DateRange", "Dates range"),
                   checkboxInput("DisplayCommunity", 
                                 label = "Display community acquired", 
-                                value = TRUE)),
+                                value = TRUE),
+                  hr(),
+                  p("Statistics", style="font-size:25px"),
+                  fluidRow(column(10, offset=1,
+                                  valueBoxOutput("BoxPatients", width = 12),
+                                  valueBoxOutput("BoxCluster", width = 12),
+                                  valueBoxOutput("BoxUnits", width = 12)))),
               box(width = 10, dataTableOutput("table"))
               ),
       
@@ -142,7 +148,8 @@ ui <- dashboardPage(
               plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
               
               # Box 1 with controls
-              box(width = 3,
+              box(width = 3,  height = 300,
+                  p("Parameters", style="font-size:25px"),
                   selectInput("plotOrder", "Samples order", list("Patients" = "patients",
                                                                  "Admission" = "in_date",
                                                                  "First MRSA" = "sampling",
@@ -154,7 +161,8 @@ ui <- dashboardPage(
                   ),
               
               # Box 2 with controls
-              box(width = 3,
+              box(width = 3,  height = 300,
+                  p("Cluster options", style="font-size:25px"),
                   fluidRow(column(6, checkboxInput("checkCluster", label = "Display clusters", value = FALSE),
                                   numericInput("DotSize", label = "Sampling size", value = 4),
                                   numericInput("SegSize", label = "Links size", value = 1)),
@@ -164,7 +172,8 @@ ui <- dashboardPage(
                   ),
               
               # Box for download
-              box(width = 3,
+              box(width = 3,  height = 300,
+                  p("Export plot", style="font-size:25px"),
                   fluidRow(column(6,
                                   numericInput("ganttHeight", "Height", value = 2048, min = 1024, step = 1024),
                                   radioButtons("ganttTypeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
@@ -184,11 +193,13 @@ ui <- dashboardPage(
                 plotOutput("frequency",  brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
               
               # Box with controls
-              box(width = 2,
-                  numericInput("freqBins", label = "Bins", value = 30, step = 1)),
+              box(width = 3, height = 300,
+                  p("Bins control", style="font-size:25px"),
+                  numericInput("freqBins", label = "Number", value = 30, step = 1)),
               
               # Box for download
-              box(width = 3,
+              box(width = 3, height = 300,
+                  p("Export plot", style="font-size:25px"),
                   fluidRow(column(6,
                                   numericInput("freqHeight", "Height", value = 2048, min = 1024, step = 1024),
                                   radioButtons("freqTypeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
@@ -406,16 +417,20 @@ server <- function(input, output, session) {
   
   # Display table
   output$table <- renderDataTable({
-    
     if (is.null(input$Data))
       return(NULL)
     
     table <- polished_data()
+    
     table <- table %>% mutate(in_date = as.character(as.POSIXct(in_date)), 
                               out_date = as.character(as.POSIXct(out_date)), 
                               sampling= as.character(as.POSIXct(sampling)))
-    return(table)
-      })
+    },
+    options = list(
+      pageLength = 20,
+      lengthChange = FALSE,
+      searching = FALSE
+    ))
   
   # Saving button Gantt plot
   output$ganttDlButton <- downloadHandler(filename = function(){paste("timeline", input$ganttTypeOut, sep = ".")},
