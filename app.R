@@ -107,76 +107,97 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       id = "SideBar",
-      
       menuItem("Table", tabName = "table", icon = icon("dashboard")),
-      conditionalPanel(
-        condition = "input.SideBar == 'table'", 
-          fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
-          sliderInput("incubation", label = "Incubation period (days)", min = 0, 
-                      max = 5, value = 4, step = 1),
-          dateRangeInput("DateRange", "Dates range"),
-          checkboxInput("DisplayCommunity", 
-                        label = "Display community acquired", 
-                        value = TRUE)
-                      ),
-      
-      menuItem("Plots", tabName = "plots", icon = icon("th")),
-      conditionalPanel(
-        condition = "input.SideBar == 'plots'",
-        h3("Filters"),
-        selectInput("plotOrder", "Samples order", list("Patients" = "patients",
-                                                       "Admission" = "in_date",
-                                                       "First MRSA" = "sampling",
-                                                       "NGS cluster" = "cluster")),
-        selectInput("plotColor", "Color", list("Unit" = "unit",
-                                               "Infection" = "infection")),
-        pickerInput("patientPicker", "Select patients", choices = "",
-                    multiple = TRUE, options = list(`actions-box` = TRUE)),
-        hr(),
-        
-        h3("Strains clusters"),
-        checkboxInput("checkCluster", label = "Display", value = FALSE),
-        numericInput("DotSize", label = "Dot", value = 4),
-        numericInput("SegSize", label = "Segment", value = 1),
-        checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
-        numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
-        numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1),
-        hr(),
-        
-        h3("Frequency table"),
-        numericInput("freqBins", label = "Bins", value = 30, step = 1),
-        
-        h3("Output"),
-        sliderInput("saveHeight", "Height", value = 2048, min = 1024, 
-                    max = 4096, step = 1024),
-        sliderInput("saveWidth", "Width", value = 2048, min = 1024, 
-                    max = 4096, step = 1024),
-        radioButtons("typeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
-                     choiceValues = c("png", "pdf", "svg"), inline = TRUE),
-        downloadButton("dlButton", "Download")
-      )
+      menuItem("Gantt", tabName = "gantt", icon = icon("th")),
+      menuItem("Frequency", tabName = "frequency", icon = icon("dashboard")),
+      fluidRow(column(10, offset=1,
+                      valueBoxOutput("BoxPatients", width = 12),
+                      valueBoxOutput("BoxCluster", width = 12),
+                      valueBoxOutput("BoxUnits", width = 12)))
     )
   ),
   
   # Body
   dashboardBody(
     tabItems(
-      # Table loading tab
+      ########## Table loading tab
       tabItem(tabName = "table",
-              fluidRow(column(1, valueBoxOutput("BoxPatients", width=20)),
-                       column(1, valueBoxOutput("BoxCluster", width=20)),
-                       column(1, valueBoxOutput("BoxUnits", width=20))),
-              tableOutput("table")
+              box(width = 2,
+                  fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
+                  sliderInput("incubation", label = "Incubation period (days)", min = 0, 
+                              max = 5, value = 4, step = 1),
+                  dateRangeInput("DateRange", "Dates range"),
+                  checkboxInput("DisplayCommunity", 
+                                label = "Display community acquired", 
+                                value = TRUE)),
+              box(width = 10, dataTableOutput("table"))
               ),
       
-      # Plots tab
-      tabItem(tabName = "plots",
-              fluidRow(
-                "Click and drag on area to zoom in. Double click to zoom out",
-                plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click"),
-                plotOutput("frequency")
+      ######## Gantt tab
+      tabItem(tabName = "gantt",
+              
+              # Box with plot
+              box(width = 12,
+              "Click and drag on area to zoom in. Double click to zoom out",
+              plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
+              
+              # Box 1 with controls
+              box(width = 3,
+                  selectInput("plotOrder", "Samples order", list("Patients" = "patients",
+                                                                 "Admission" = "in_date",
+                                                                 "First MRSA" = "sampling",
+                                                                 "NGS cluster" = "cluster")),
+                  selectInput("plotColor", "Information", list("Unit" = "unit",
+                                                         "Infection" = "infection")),
+                  pickerInput("patientPicker", "Select patients", choices = "",
+                              multiple = TRUE, options = list(`actions-box` = TRUE))
+                  ),
+              
+              # Box 2 with controls
+              box(width = 3,
+                  fluidRow(column(6, checkboxInput("checkCluster", label = "Display clusters", value = FALSE),
+                                  numericInput("DotSize", label = "Sampling size", value = 4),
+                                  numericInput("SegSize", label = "Links size", value = 1)),
+                           column(6, checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
+                                  numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
+                                  numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1)))
+                  ),
+              
+              # Box for download
+              box(width = 3,
+                  fluidRow(column(6,
+                                  numericInput("ganttHeight", "Height", value = 2048, min = 1024, step = 1024),
+                                  radioButtons("ganttTypeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
+                                               choiceValues = c("png", "pdf", "svg"), inline = TRUE)),
+                           column(6, numericInput("ganttWidth", "Width", value = 2048, min = 1024, step = 1024),
+                                  downloadButton("ganttDlButton", "Download"))
+                  )
               )
-      )
+      ),
+      
+      ########### Frequency tab
+      tabItem(tabName = "frequency",
+              
+              # Box with frequency plot
+              box(width = 12,
+                "Click and drag on area to zoom in. Double click to zoom out",
+                plotOutput("frequency",  brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
+              
+              # Box with controls
+              box(width = 2,
+                  numericInput("freqBins", label = "Bins", value = 30, step = 1)),
+              
+              # Box for download
+              box(width = 3,
+                  fluidRow(column(6,
+                                  numericInput("freqHeight", "Height", value = 2048, min = 1024, step = 1024),
+                                  radioButtons("freqTypeOut", NULL, choiceNames = c("PNG", "PDF", "SVG"),
+                                               choiceValues = c("png", "pdf", "svg"), inline = TRUE)),
+                           column(6, numericInput("freqWidth", "Width", value = 2048, min = 1024, step = 1024),
+                                  downloadButton("freqDlButton", "Download"))
+                  )
+              )
+              )
     )
   )
 )
@@ -201,7 +222,6 @@ server <- function(input, output, session) {
 
     return(table)
   })
-
 
   # Filter dates by brushing the plot
   filtered_data <- reactive({
@@ -258,21 +278,21 @@ server <- function(input, output, session) {
       valueBox(
         length(levels(factor(pol_data$patient))),
         "Patients",
-        icon = icon("head-side-mask",class="sharp", lib = "font-awesome"),
+        icon = icon("head-side-mask", class="sharp", lib = "font-awesome"),
         color = "yellow")})
     
     output$BoxCluster <- renderValueBox({
       valueBox(
         length(levels(factor(pol_data$cluster))),
         "Cluster",
-        icon = icon("circle-nodes", lib = "font-awesome"),
+        icon = icon("circle-nodes", class="sharp", lib = "font-awesome"),
         color = "blue")})
     
     output$BoxUnits <- renderValueBox({
       valueBox(
         length(levels(factor(pol_data$patient))),
         "Units",
-        icon = icon("hospital", lib = "font-awesome"),
+        icon = icon("hospital", class="sharp", lib = "font-awesome"),
         color = "red")})
     
     return(pol_data)
@@ -375,7 +395,6 @@ server <- function(input, output, session) {
     # Main plot
     plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram(bins=input$freqBins, color="black")
     plot <- plot + theme_bw() + theme(axis.title = element_blank(), 
-                                      legend.position = "none",
                                       axis.text = element_text(size=text_size))
     
     return(plot)
@@ -386,7 +405,7 @@ server <- function(input, output, session) {
   output$frequency <- renderPlot({draw_frequency()})
   
   # Display table
-  output$table <- renderTable({
+  output$table <- renderDataTable({
     
     if (is.null(input$Data))
       return(NULL)
@@ -399,13 +418,22 @@ server <- function(input, output, session) {
       })
   
   # Saving button Gantt plot
-  output$dlButton <- downloadHandler(filename = function(){paste("timeline", input$typeOut, sep = ".")},
+  output$ganttDlButton <- downloadHandler(filename = function(){paste("timeline", input$ganttTypeOut, sep = ".")},
                                        content = function(file){
-                                         ggsave(file, draw_gantt(), device = input$typeOut,
-                                                width = as.numeric(input$saveWidth),
-                                                height = as.numeric(input$saveHeight),
+                                         ggsave(file, draw_gantt(), device = input$ganttTypeOut,
+                                                width = as.numeric(input$ganttWidth),
+                                                height = as.numeric(input$ganttHeight),
                                                 units = "px")
                                          })
+  
+  # Saving button frequency plot
+  output$freqDlButton <- downloadHandler(filename = function(){paste("timeline", input$freqTypeOut, sep = ".")},
+                                          content = function(file){
+                                            ggsave(file, draw_frequency(), device = input$freqTypeOut,
+                                                   width = as.numeric(input$freqWidth),
+                                                   height = as.numeric(input$freqHeight),
+                                                   units = "px")
+                                          })
   
 }
 
