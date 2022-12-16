@@ -126,10 +126,10 @@ ui <- dashboardPage(
                   p("Parameters", style="font-size:25px"),
                   sliderInput("incubation", label = "Incubation period (days)", min = 0, 
                               max = 5, value = 4, step = 1),
-                  dateRangeInput("DateRange", "Dates range"),
                   checkboxInput("DisplayCommunity", 
                                 label = "Display community acquired", 
                                 value = TRUE),
+                  dateRangeInput("DateRange", "Dates range"),
                   hr(),
                   p("Statistics", style="font-size:25px"),
                   fluidRow(column(10, offset=1,
@@ -230,7 +230,17 @@ server <- function(input, output, session) {
     # Update date range widget
     updateDateRangeInput(session, "DateRange", start=min(table$in_date), 
                          end=max(table$out_date))
-
+    
+    # Update information selectInput with additional categories
+    add_cat <- colnames(table)[7:ncol(table)]
+    categories <- list("Unit" = "unit",
+         "Infection" = "infection")
+    for (add in add_cat){
+      categories[[add]] = add
+    }
+    updateSelectInput(session, "plotColor", choices = categories)
+    
+    
     return(table)
   })
 
@@ -337,7 +347,8 @@ server <- function(input, output, session) {
     plot <- ggplot(plot_data, aes(x=in_date, xend=out_date, y=patient, yend=patient, color=color)) +
       geom_segment(linewidth=line_size) +
       theme_bw()+ #use ggplot theme with black gridlines and white background
-      theme(axis.title = element_blank(), legend.position = "bottom",
+      theme(axis.title = element_blank(), 
+            legend.position = "bottom",
             legend.key.size = unit(1.5, 'cm'),
             legend.text = element_text(size=15),
             legend.title = element_blank(),
@@ -392,21 +403,23 @@ server <- function(input, output, session) {
     for (line in 1:nrow(plot_data)){
       days <- seq(plot_data[line,"in_date"], plot_data[line,"out_date"], by="days")
       subtable <- data.frame(day=days, 
-                             unit=rep(plot_data[line,"unit"], length(days)),
-                             cluster=rep(plot_data[line,"cluster"], length(days)),
-                             infection=rep(plot_data[line,"infection"], length(days))
+                             var=rep(plot_data[line, input$plotColor], length(days)) # Add selected variable in the plot
       )
       plot_data2 <- rbind.data.frame(plot_data2, subtable)
     }
 
     # Define text size and color
     text_size <- max(10, 25-length(levels(as.factor(plot_data$patient))))
-    color <- plot_data2[,input$plotColor]
+    color <- plot_data2[,"var"]
     
     # Main plot
-    plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram(bins=input$freqBins, color="black")
+    plot <- ggplot(plot_data2, aes(x=day, fill=color)) + geom_histogram(bins=input$freqBins)
     plot <- plot + theme_bw() + theme(axis.title = element_blank(), 
-                                      axis.text = element_text(size=text_size))
+                                      axis.text = element_text(size=text_size),
+                                      legend.position = "bottom",
+                                      legend.key.size = unit(1.5, 'cm'),
+                                      legend.text = element_text(size=15),
+                                      legend.title = element_blank())
     
     return(plot)
   })
