@@ -1,6 +1,6 @@
 # Install packages if not present
 list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets",
-                      "svglite", "shinydashboard")
+                      "svglite", "shinydashboard", "plotly", "shinycssloaders")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -12,12 +12,16 @@ library(ggplot2)
 library(forcats)
 library(svglite)
 library(shinydashboard)
+library(plotly)
+library(shinycssloaders)
 
 ##### Custom functions for EpiPlot #######
-hosp_or_comm <- function(table, timelapse, community){
+hosp_or_comm <- function(table, timelapse){
   # Define if infection is community or hospital acquired.
   # Add column in table and return the new table
-  table <- cbind.data.frame(table, infection=rep("", nrow(table)))
+  
+  # Basically, we consider everything community acquired
+  table <- cbind.data.frame(table, infection=rep("Community", nrow(table)))
   
   # Analyze for each patient
   for (p in levels(factor(table$patient))){
@@ -50,20 +54,13 @@ hosp_or_comm <- function(table, timelapse, community){
         if (sample_date_epoch-in_date_epoch >= timelapse*86400){
           # Considered as hospital acquired
           table[table$patient==p, "infection"] <- "Hospital"
-        } else {
-          # Considered as community acquired
-          table[table$patient==p, "infection"] <- "Community"
         }
       }
     }
   }
-  
-  if (community == TRUE){
-    return(table)
-  } else {
-    return(table[which(table$infection=="Hospital"),])
-  }
+  return(table)
 }
+
 
 add_time <- function(table){
   # Add time depending on previous line (if some date overlay)
@@ -97,6 +94,10 @@ add_time <- function(table){
   return(new_table)
 }    
 
+#### Settings parameters #######
+# Loading animation
+options(spinner.type = 7)
+
 ##### Shiny code for EpiPlot #######
 # UI
 ui <- dashboardPage(
@@ -119,6 +120,10 @@ ui <- dashboardPage(
     tabItems(
       ########## Table loading tab
       tabItem(tabName = "table",
+              fluidRow(box(width = 12,
+                           fluidRow(column(2, valueBoxOutput("BoxPatients", width=10)),
+                                    column(2, valueBoxOutput("BoxCluster", width=10)),
+                                    column(2, valueBoxOutput("BoxUnits", width=10))))),
               box(width = 2,
                   p("Load table", style="font-size:25px"),
                   fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
@@ -126,16 +131,16 @@ ui <- dashboardPage(
                   p("Parameters", style="font-size:25px"),
                   sliderInput("incubation", label = "Incubation period (days)", min = 0, 
                               max = 5, value = 4, step = 1),
-                  checkboxInput("DisplayCommunity", 
-                                label = "Display community acquired", 
-                                value = TRUE),
                   dateRangeInput("DateRange", "Dates range"),
-                  hr(),
-                  p("Statistics", style="font-size:25px"),
-                  fluidRow(column(10, offset=1,
-                                  valueBoxOutput("BoxPatients", width = 12),
-                                  valueBoxOutput("BoxCluster", width = 12),
-                                  valueBoxOutput("BoxUnits", width = 12)))),
+                  pickerInput("patientPicker", "Select patients", choices = "",
+                              multiple = TRUE, options = list(`actions-box` = TRUE, size = 10)),
+                  pickerInput("unitPicker", "Select units", choices = "",
+                              multiple = TRUE, options = list(`actions-box` = TRUE, size = 10)),
+                  pickerInput("clusterPicker", "Select clusters", choices = "",
+                              multiple = TRUE, options = list(`actions-box` = TRUE, size = 10)),
+                  pickerInput("infectionPicker", "Select infection", choices = list("Hospital", "Community"),
+                              multiple = TRUE, options = list(`actions-box` = TRUE), selected = list("Hospital", "Community"))
+                  ),
               box(width = 10, dataTableOutput("table"))
               ),
       
@@ -145,34 +150,33 @@ ui <- dashboardPage(
               # Box with plot
               box(width = 12,
               "Click and drag on area to zoom in. Double click to zoom out",
-              plotOutput("timeline", brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
+              withSpinner(plotlyOutput("timeline"))),
               
-              # Box 1 with controls
-              box(width = 3,  height = 300,
+              # Box 1 with filtering parameters
+              box(width = 3,  height = 400,
                   p("Parameters", style="font-size:25px"),
                   selectInput("plotOrder", "Samples order", list("Patients" = "patients",
                                                                  "Admission" = "in_date",
                                                                  "First MRSA" = "sampling",
                                                                  "NGS cluster" = "cluster")),
-                  selectInput("plotColor", "Information", list("Unit" = "unit",
-                                                         "Infection" = "infection")),
-                  pickerInput("patientPicker", "Select patients", choices = "",
-                              multiple = TRUE, options = list(`actions-box` = TRUE))
+                  selectInput("plotColor", "Information", choices = list("Unit" = "unit",
+                                                                         "Infection" = "infection",
+                                                                         "Cluster" = "cluster")),
+                  checkboxInput("checkCluster", label = "Display clusters", value = FALSE),
+                  checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE)
                   ),
               
-              # Box 2 with controls
-              box(width = 3,  height = 300,
+              # Box 2 with controls of graphical parameters
+              box(width = 3,  height = 400,
                   p("Cluster options", style="font-size:25px"),
-                  fluidRow(column(6, checkboxInput("checkCluster", label = "Display clusters", value = FALSE),
-                                  numericInput("DotSize", label = "Sampling size", value = 4),
-                                  numericInput("SegSize", label = "Links size", value = 1)),
-                           column(6, checkboxInput("checkClusterLabel", label = "Cluster label", value = FALSE),
-                                  numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
+                  fluidRow(column(6, numericInput("DotSize", label = "Sampling size", value = 4),
+                                  numericInput("segmentSize", label = "Segment size", value = 4)),
+                           column(6, numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
                                   numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1)))
                   ),
               
               # Box for download
-              box(width = 3,  height = 300,
+              box(width = 3,  height = 400,
                   p("Export plot", style="font-size:25px"),
                   fluidRow(column(6,
                                   numericInput("ganttHeight", "Height", value = 2048, min = 1024, step = 1024),
@@ -190,7 +194,7 @@ ui <- dashboardPage(
               # Box with frequency plot
               box(width = 12,
                 "Click and drag on area to zoom in. Double click to zoom out",
-                plotOutput("frequency",  brush = brushOpts(id = "plot_brush", resetOnNew = TRUE), dblclick = "db_click")),
+                withSpinner(plotlyOutput("frequency"))),
               
               # Box with controls
               box(width = 3, height = 300,
@@ -217,7 +221,7 @@ ui <- dashboardPage(
 server <- function(input, output, session) {
   
   # Load table
-  get_data <- reactive({
+  raw_data <- reactive({
     
     # Load the table
     table <- read.csv(input$Data$datapath)
@@ -232,91 +236,80 @@ server <- function(input, output, session) {
                          end=max(table$out_date))
     
     # Update information selectInput with additional categories
-    add_cat <- colnames(table)[7:ncol(table)]
     categories <- list("Unit" = "unit",
-         "Infection" = "infection")
-    for (add in add_cat){
-      categories[[add]] = add
+         "Infection" = "infection",
+         "Cluster" = "cluster")
+    if (ncol(table) > 6){
+      add_cat <- colnames(table)[7:ncol(table)]
+      for (add in add_cat){
+        categories[[add]] = add
+      }
+      updateSelectInput(session, "plotColor", choices = categories)
     }
-    updateSelectInput(session, "plotColor", choices = categories)
+   
     
+    # Update patient picker widget
+    updatePickerInput(session, "patientPicker", choices = levels(factor(table$patient)),
+                      selected = levels(factor(table$patient)))
+    
+    # Update unit picker widget
+    updatePickerInput(session, "unitPicker", choices = levels(factor(table$unit)),
+                      selected = levels(factor(table$unit)))
+    
+    # Update cluster picker widget
+    updatePickerInput(session, "clusterPicker", choices = levels(factor(table$cluster)),
+                      selected = levels(factor(table$cluster)))
     
     return(table)
   })
 
-  # Filter dates by brushing the plot
+
+  # Filtering data
   filtered_data <- reactive({
-    fil_data <- get_data()
-    brush_data <- input$plot_brush
-    min_date <- brush_data$xmin
-    max_date <- brush_data$xmax
-    db_click <- input$db_click
-    
-    if (!is.null(min_date)){
-      fil_data <- fil_data[(which(fil_data$in_date>=min_date)),]
-      fil_data <- fil_data[(which(fil_data$out_date<=max_date)),]
-      updateDateRangeInput(session, "DateRange", start=as.POSIXct(min_date, origin="1970-01-01"), 
-                           end=as.POSIXct(max_date, origin="1970-01-01"))
-    }
-    
-    if (!is.null(db_click)){
-      updateDateRangeInput(session, "DateRange", start=min(fil_data$in_date), 
-                           end=max(fil_data$out_date))
-    }
+    filt_data <- raw_data()
     
     # Filter by date
-    fil_data <- fil_data[(which(fil_data$in_date>=as.POSIXct(input$DateRange[1]))),]
-    fil_data <- fil_data[(which(fil_data$out_date<=as.POSIXct(input$DateRange[2]))),]
+    filt_data <- filt_data[(which(filt_data$in_date>=as.POSIXct(input$DateRange[1]))),]
+    filt_data <- filt_data[(which(filt_data$out_date<=as.POSIXct(input$DateRange[2]))),]
     
-    return(fil_data)
-    })
-  
-  # Filtering data
-  polished_data <- reactive({
-    pol_data <- filtered_data()
-    
-    # Add community/hospital column
-    pol_data <- hosp_or_comm(pol_data, input$incubation, input$DisplayCommunity)
+    # Filter by patient, unit and cluster
+    filt_data <- filt_data[which(filt_data$patient %in% input$patientPicker),]
+    filt_data <- filt_data[which(filt_data$unit %in% input$unitPicker),]
+    filt_data <- filt_data[which(filt_data$cluster %in% input$clusterPicker),]
+
+    # Add community/hospital column and filter this data
+    filt_data <- hosp_or_comm(filt_data, input$incubation)
+    filt_data <- filt_data[which(filt_data$infection %in% input$infectionPicker),]
     
     # Changing samples order for plot
     order_var <- input$plotOrder
     if (order_var == "patients"){
-      pol_data$patient <- factor(pol_data$patient, levels = unique(sort(pol_data$patient)))
+      filt_data$patient <- factor(filt_data$patient, levels = unique(sort(filt_data$patient)))
     } else if (order_var == "in_date") {
-      pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$in_date)]))
+      filt_data$patient <- factor(filt_data$patient, levels = unique(filt_data$patient[order(filt_data$in_date)]))
     } else if (order_var == "sampling"){
-      pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$sampling)]))
+      filt_data$patient <- factor(filt_data$patient, levels = unique(filt_data$patient[order(filt_data$sampling)]))
     } else if (order_var == "cluster"){
-      pol_data$patient <- factor(pol_data$patient, levels = unique(pol_data$patient[order(pol_data$cluster)]))
+      filt_data$patient <- factor(filt_data$patient, levels = unique(filt_data$patient[order(filt_data$cluster)]))
     }
-    
-    # Update patient picker widget
-    updatePickerInput(session, "patientPicker", choices = levels(factor(pol_data$patient)),
-                      selected = levels(factor(pol_data$patient)))
-    
+
     # Update information boxes
     output$BoxPatients <- renderValueBox({
-      valueBox(
-        length(levels(factor(pol_data$patient))),
-        "Patients",
+      valueBox(length(levels(factor(filt_data$patient))), "Patients",
         icon = icon("head-side-mask", class="sharp", lib = "font-awesome"),
         color = "yellow")})
     
     output$BoxCluster <- renderValueBox({
-      valueBox(
-        length(levels(factor(pol_data$cluster))),
-        "Cluster",
-        icon = icon("circle-nodes", class="sharp", lib = "font-awesome"),
+      valueBox(length(levels(factor(filt_data$cluster))),
+        "Cluster", icon = icon("circle-nodes", class="sharp", lib = "font-awesome"),
         color = "blue")})
     
     output$BoxUnits <- renderValueBox({
-      valueBox(
-        length(levels(factor(pol_data$patient))),
-        "Units",
-        icon = icon("hospital", class="sharp", lib = "font-awesome"),
+      valueBox(length(levels(factor(filt_data$unit))),
+        "Units", icon = icon("hospital", class="sharp", lib = "font-awesome"),
         color = "red")})
     
-    return(pol_data)
+    return(filt_data)
   })
   
   # Gantt plot
@@ -327,25 +320,21 @@ server <- function(input, output, session) {
       return(NULL)
     
     # Import filtered data
-    plot_data <- polished_data()
+    plot_data <- filtered_data()
     
     # Add time on date to have period of time for one-day visits
     # Add in seconds (86399 = 23h59m59s, 43200=12h00m00s)
     plot_data <- add_time(plot_data)
     
-    # Keep only selected patients
-    plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
-    
     # Define best segment and dot size depending on patient number (with minimums)
-    line_size <- max(3, 20-length(levels(as.factor(plot_data$patient))))
     text_size <- max(10, 25-length(levels(as.factor(plot_data$patient))))
     
     # Define colors group
-    color <- plot_data[,input$plotColor]
+    legend <- plot_data[,input$plotColor]
     
     # Main plot
-    plot <- ggplot(plot_data, aes(x=in_date, xend=out_date, y=patient, yend=patient, color=color)) +
-      geom_segment(linewidth=line_size) +
+    plot <- ggplot(plot_data, aes(x=in_date, xend=out_date, y=patient, yend=patient, color=legend)) +
+      geom_segment(linewidth=input$segmentSize) +
       theme_bw()+ #use ggplot theme with black gridlines and white background
       theme(axis.title = element_blank(), 
             legend.position = "bottom",
@@ -355,21 +344,14 @@ server <- function(input, output, session) {
             axis.text = element_text(size=text_size))
     
     if (input$checkCluster == TRUE){
-      # Add cluster segments
-      for (level in levels(factor(plot_data$cluster))){
-        df <- plot_data[which(plot_data$cluster==level),]
-        df <- df[!duplicated(df$patient),]
-        df <- df[order(df$sampling),]
-        if (nrow(df) > 1){
-          for (line in 1:(nrow(df)-1)){
-            plot <- plot + geom_segment(x=df[line,"sampling"], xend=df[line+1,"sampling"], 
-                                        y=df[line,"patient"], yend=df[line+1,"patient"],
-                                        color="black", linewidth=input$SegSize)
-          }
-        }
-      }
+      sub_plot_data <- plot_data[!duplicated(plot_data$patient),]
+      
       # Add sampling date
-      plot <- plot + geom_point(aes(x=sampling, y=patient), colour="black", size=input$DotSize)
+      plot <- plot + geom_point(data=sub_plot_data,
+                                aes(x=sampling, y=patient), color="black", size=input$DotSize)
+
+      plot <- plot + geom_line(data=sub_plot_data,
+                               aes(x=sampling, y=patient, group=cluster), color="black")
 
       # Add cluster label
       if (input$checkClusterLabel == TRUE){
@@ -392,7 +374,7 @@ server <- function(input, output, session) {
       return(NULL)
     
     # Import filtered data
-    plot_data <- polished_data()
+    plot_data <- filtered_data()
 
     # Keep only selected patients
     plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
@@ -425,22 +407,22 @@ server <- function(input, output, session) {
   })
   
   # Display Gantt plot and frequency plot
-  output$timeline <- renderPlot({draw_gantt()})
-  output$frequency <- renderPlot({draw_frequency()})
+  output$timeline <- renderPlotly({draw_gantt()})
+  output$frequency <- renderPlotly({draw_frequency()})
   
   # Display table
   output$table <- renderDataTable({
     if (is.null(input$Data))
       return(NULL)
     
-    table <- polished_data()
+    table <- filtered_data()
     
     table <- table %>% mutate(in_date = as.character(as.POSIXct(in_date)), 
                               out_date = as.character(as.POSIXct(out_date)), 
                               sampling= as.character(as.POSIXct(sampling)))
     },
     options = list(
-      pageLength = 20,
+      pageLength = 15,
       lengthChange = FALSE,
       searching = FALSE
     ))
