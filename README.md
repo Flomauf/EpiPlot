@@ -27,12 +27,12 @@ The following table is an example of data you must provide to EpiPlot. Columns n
 | p03      | B    | 2007-01-03 | 2007-01-05 | 2007-01-07 | Y       |
 | p03      | A    | 2007-01-05 | 2007-01-10 | 2007-01-07 | Y       |
 
-patient = patient id (should not be only a number)
-unit = unit or service where the patient stayed
-in_date = the date the patient entered the unit
-out_date = the date the patient left the unit
-sampling = the date of the first positive sampling (should be the same value for all line of the same patient)
-cluster = genetic cluster (should be the same value for all line of the same patient)
+patient = patient id (should not be only a number)  
+unit = unit or service where the patient stayed  
+in_date = the date the patient entered the unit  
+out_date = the date the patient left the unit  
+sampling = the date of the first positive sampling (should be the same value for all line of the same patient)  
+cluster = genetic cluster (should be the same value for all line of the same patient)  
 
 Any additional column with categorical data (e.g. sex) will be integrated and will be available for sample classification in the plots. 
 
