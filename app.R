@@ -1,6 +1,7 @@
 # Install packages if not present
 list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets",
-                      "svglite", "shinydashboard", "plotly", "shinycssloaders")
+                      "svglite", "shinydashboard", "plotly", "shinycssloaders",
+                      "lubridate", "GGally")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -14,6 +15,11 @@ library(svglite)
 library(shinydashboard)
 library(plotly)
 library(shinycssloaders)
+library(lubridate)
+library(ggnet)
+library(network)
+library(sna)
+library(scales)
 
 ##### Custom functions for EpiPlot #######
 hosp_or_comm <- function(table, timelapse){
@@ -109,9 +115,10 @@ ui <- dashboardPage(
     sidebarMenu(
       id = "SideBar",
       menuItem("Table", tabName = "table", icon = icon("table")),
+      menuItem("Stats", tabName = "stats", icon = icon("chart-simple")),
       menuItem("Gantt", tabName = "gantt", icon = icon("chart-gantt")),
-      menuItem("Frequency", tabName = "frequency", icon = icon("chart-column"))
-
+      menuItem("Frequency", tabName = "frequency", icon = icon("chart-column")),
+      menuItem("Network", tabName = "network", icon = icon("circle-nodes"))
     )
   ),
   
@@ -172,6 +179,7 @@ ui <- dashboardPage(
                   fluidRow(column(6, numericInput("DotSize", label = "Sampling size", value = 4),
                                   numericInput("segmentSize", label = "Segment size", value = 4)),
                            column(6, numericInput("clustLabelText", label = "Text size", value = 3, step = 0.5),
+                                  numericInput("linkSize", label = "Links size", value = 1, step = 1),
                                   numericInput("clustLabelNudge", label = "Nudge", value = 0.5, step = 0.1)))
                   ),
               
@@ -210,9 +218,37 @@ ui <- dashboardPage(
                                                choiceValues = c("png", "pdf", "svg"), inline = TRUE)),
                            column(6, numericInput("freqWidth", "Width", value = 2048, min = 1024, step = 1024),
                                   downloadButton("freqDlButton", "Download"))
-                  )
-              )
-              )
+                          )
+                )
+              ),
+      
+      ########### Stats tab
+      tabItem(tabName = "stats",
+              
+              # Box with plot stats units
+              box(width = 4,
+                  withSpinner(plotlyOutput("stats_units"))),
+              
+              # Box with plot stats cluster
+              box(width = 4,
+                  withSpinner(plotlyOutput("stats_cluster")))
+              ),
+      
+      ########### Network tab
+      tabItem(tabName = "network",
+              
+              # Box with plot stats units
+              box(width = 10,
+                  withSpinner(plotlyOutput("network"))),
+              
+              # Box with controls of graphical parameters
+              box(width = 4,  height = 400,
+                  p("Cluster options", style="font-size:25px"),
+                  fluidRow(column(6, numericInput("networkNodeSize", label = "Node size", value = 10),
+                                  selectInput("networkColor", "Information", choices = list("Infection" = "infection",
+                                                                                         "Cluster" = "cluster"))))
+              ),
+      )
     )
   )
 )
@@ -262,7 +298,6 @@ server <- function(input, output, session) {
     
     return(table)
   })
-
 
   # Filtering data
   filtered_data <- reactive({
@@ -351,7 +386,7 @@ server <- function(input, output, session) {
                                 aes(x=sampling, y=patient), color="black", size=input$DotSize)
 
       plot <- plot + geom_line(data=sub_plot_data,
-                               aes(x=sampling, y=patient, group=cluster), color="black")
+                               aes(x=sampling, y=patient, group=cluster), linewidth=input$linkSize, color="black")
 
       # Add cluster label
       if (input$checkClusterLabel == TRUE){
@@ -375,9 +410,6 @@ server <- function(input, output, session) {
     
     # Import filtered data
     plot_data <- filtered_data()
-
-    # Keep only selected patients
-    plot_data <- plot_data[plot_data$patient %in% input$patientPicker,]
     
     # Transform data for plotting
     plot_data2 <- data.frame()
@@ -406,9 +438,103 @@ server <- function(input, output, session) {
     return(plot)
   })
   
+  # Stats units plot
+  draw_stats_units <- reactive({
+    
+    # Return nothing if no data loaded
+    if (is.null(input$Data))
+      return(NULL)
+  
+    # Import filtered data
+    plot_data <- filtered_data()
+    
+    # Data for each patient
+    plot_data <- plot_data[match(unique(plot_data$patient), plot_data$patient),]
+    plot_data <- as.data.frame(table(plot_data$unit))
+    plot_data$Freq <- plot_data$Freq/sum(plot_data$Freq)*100
+    
+    # Plot proportion units
+    plot <- ggplot(plot_data, aes(x = Var1, y = Freq))+
+      geom_col(aes(fill = Var1)) + coord_flip() + theme_bw()
+    plot <- plot  + theme(axis.title = element_blank(), 
+                          legend.position = "none")
+    
+
+  })
+    
+  # Stats units plot
+  draw_stats_cluster <- reactive({
+    
+    # Return nothing if no data loaded
+    if (is.null(input$Data))
+      return(NULL)
+    
+    # Import filtered data
+    plot_data <- filtered_data()
+    
+    # Data for each patient
+    plot_data <- plot_data[match(unique(plot_data$patient), plot_data$patient),]
+    plot_data <- as.data.frame(table(plot_data$cluster))
+    plot_data$Freq <- plot_data$Freq/sum(plot_data$Freq)*100
+    
+    # Plot proportion units
+    plot <- ggplot(plot_data, aes(x = Var1, y = Freq))+
+      geom_col(aes(fill = Var1)) + coord_flip() + theme_bw()
+    plot <- plot  + theme(axis.title = element_blank(), 
+                          legend.position = "none")
+    
+    
+  })
+  
+  # Stats units plot
+  draw_network <- reactive({
+    
+    # Return nothing if no data loaded
+    if (is.null(input$Data))
+      return(NULL)
+    
+    # Import filtered data
+    plot_data <- filtered_data()
+    
+    # Convert into edge list. Day by day, all patient in the same unit are reported.
+    connections <- matrix(ncol=2)
+    for (day in seq.POSIXt(min(plot_data$in_date), max(plot_data$out_date), by="days")){
+      day_data <- plot_data[which(plot_data$in_date <= day & plot_data$out_date >= day),] # Data per day
+      for (unit in levels(factor(day_data$unit))){  # data per unit
+        unit_data <- day_data[which(day_data$unit == unit),]
+        if (length(levels(factor(unit_data$patient))) > 1){
+          connections <- rbind(connections, t(combn(unit_data$patient,2)))  # Add all possible combination of 2
+        }
+      }
+    }
+    connections <- connections[-1,]
+    
+    # Isolating data for each patient
+    patient_data <- plot_data[match(unique(plot_data$patient), plot_data$patient),] # Unique values per patient
+    patient_data <- patient_data[patient_data$patient==sort(patient_data$patient),] # Ordering by patient factor levels
+
+    # Define node color
+    values <- levels(factor(patient_data[,input$networkColor]))
+    colors_palette <- hue_pal()(length(values))  # ggplot2 default colors
+    names(colors_palette) <- levels(factor(patient_data[,input$networkColor]))
+    
+    # Define edge number and size
+    new_connections <- cbind(connections, paste(connections[,1], connections[,2], sep="-"))
+    edge_values <- as.numeric(table(factor(new_connections[,3], levels=unique(new_connections[,3]))))
+    edge_size <- rescale(edge_values, c(0.25, 5))
+
+    # Plot
+    ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
+           , size = input$networkNodeSize, palette = colors_palette, edge.label =edge_values, edge.size = edge_size)
+    
+  })
+  
   # Display Gantt plot and frequency plot
   output$timeline <- renderPlotly({draw_gantt()})
   output$frequency <- renderPlotly({draw_frequency()})
+  output$stats_units <- renderPlotly({draw_stats_units()})
+  output$stats_cluster <- renderPlotly({draw_stats_cluster()})
+  output$network <- renderPlotly({draw_network()})
   
   # Display table
   output$table <- renderDataTable({
