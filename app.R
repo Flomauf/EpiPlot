@@ -1,7 +1,7 @@
 # Install packages if not present
 list.of.packages <- c("ggplot2", "shiny", "dplyr", "forcats", "shinyWidgets",
                       "svglite", "shinydashboard", "plotly", "shinycssloaders",
-                      "lubridate", "GGally")
+                      "lubridate", "GGally", "network", "sna")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -16,7 +16,7 @@ library(shinydashboard)
 library(plotly)
 library(shinycssloaders)
 library(lubridate)
-library(ggnet)
+library(GGally)
 library(network)
 library(sna)
 library(scales)
