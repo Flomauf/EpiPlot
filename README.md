@@ -7,6 +7,7 @@ This tool is still under development.
 You only need to have Shiny installed and loaded in your R session.  
 ```
 install.packages("shiny")
+library(shiny)
 ```
 Then the easiest way to use Epi_plot is to start it through GitHub.  
 ```
