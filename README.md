@@ -11,7 +11,7 @@ library(shiny)
 ```
 Then the easiest way to use Epi_plot is to start it through GitHub.  
 ```
-runGitHub("epi_plot", "Mauffrey")
+runGitHub("EpiPlot", "Flomauf")
 ```
 The first time you run the script, some packages will be installed.
 
