@@ -16,7 +16,7 @@ library(shinydashboard)
 library(plotly)
 library(shinycssloaders)
 library(lubridate)
-library(ggnet)
+library(GGally)
 library(network)
 library(sna)
 library(scales)
@@ -127,11 +127,12 @@ ui <- dashboardPage(
     tabItems(
       ########## Table loading tab
       tabItem(tabName = "table",
-              fluidRow(box(width = 12,
-                           fluidRow(column(2, valueBoxOutput("BoxPatients", width=10)),
-                                    column(2, valueBoxOutput("BoxCluster", width=10)),
-                                    column(2, valueBoxOutput("BoxUnits", width=10))))),
-              box(width = 2,
+              fluidRow(column(12,
+                              box(width = 12, height = 130,
+                                  fluidRow(column(2, valueBoxOutput("BoxPatients", width=10)),
+                                           column(2, valueBoxOutput("BoxCluster", width=10)),
+                                           column(2, valueBoxOutput("BoxUnits", width=10)))))),
+              box(width = 2, height = 670,
                   p("Load table", style="font-size:25px"),
                   fileInput("Data", NULL, accept=c("text/csv", "text/txt")),
                   hr(),
@@ -148,7 +149,7 @@ ui <- dashboardPage(
                   pickerInput("infectionPicker", "Select infection", choices = list("Hospital", "Community"),
                               multiple = TRUE, options = list(`actions-box` = TRUE), selected = list("Hospital", "Community"))
                   ),
-              box(width = 10, dataTableOutput("table"))
+              box(width = 10, height = 670, dataTableOutput("table"))
               ),
       
       ######## Gantt tab
@@ -156,7 +157,6 @@ ui <- dashboardPage(
               
               # Box with plot
               box(width = 12,
-              "Click and drag on area to zoom in. Double click to zoom out",
               withSpinner(plotlyOutput("timeline"))),
               
               # Box 1 with filtering parameters
@@ -201,7 +201,6 @@ ui <- dashboardPage(
               
               # Box with frequency plot
               box(width = 12,
-                "Click and drag on area to zoom in. Double click to zoom out",
                 withSpinner(plotlyOutput("frequency"))),
               
               # Box with controls
@@ -227,10 +226,12 @@ ui <- dashboardPage(
               
               # Box with plot stats units
               box(width = 4,
+                  h3("Units occupation (days)"),
                   withSpinner(plotlyOutput("stats_units"))),
               
               # Box with plot stats cluster
               box(width = 4,
+                  h3("Cluster proportion (%)"),
                   withSpinner(plotlyOutput("stats_cluster")))
               ),
       
@@ -238,7 +239,7 @@ ui <- dashboardPage(
       tabItem(tabName = "network",
               
               # Box with plot stats units
-              box(width = 10,
+              box(width = 12,
                   withSpinner(plotlyOutput("network"))),
               
               # Box with controls of graphical parameters
@@ -246,10 +247,11 @@ ui <- dashboardPage(
                   p("Cluster options", style="font-size:25px"),
                   fluidRow(column(6, numericInput("networkNodeSize", label = "Node size", value = 10),
                                   selectInput("networkColor", "Information", choices = list("Infection" = "infection",
-                                                                                         "Cluster" = "cluster"))))
-              ),
-      )
-    )
+                                                                                         "Cluster" = "cluster"))),
+                           column(6, checkboxInput("networkLinkWidth", label = "Links width proportion"),
+                                  checkboxInput("networkLinkNumber", label = "Links width number")))),
+            )
+        )
   )
 )
 
@@ -493,6 +495,9 @@ server <- function(input, output, session) {
     if (is.null(input$Data))
       return(NULL)
     
+    # Seed for keeping the same network plot at each generation
+    set.seed(3232)
+    
     # Import filtered data
     plot_data <- filtered_data()
     
@@ -523,9 +528,20 @@ server <- function(input, output, session) {
     edge_values <- as.numeric(table(factor(new_connections[,3], levels=unique(new_connections[,3]))))
     edge_size <- rescale(edge_values, c(0.25, 5))
 
-    # Plot
-    ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
-           , size = input$networkNodeSize, palette = colors_palette, edge.label =edge_values, edge.size = edge_size)
+    # Plot (depending on display option)
+    if (input$networkLinkWidth == TRUE && input$networkLinkNumber == TRUE){
+      ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
+             , size = input$networkNodeSize, palette = colors_palette, edge.label = edge_values, edge.size = edge_size)
+    } else if (input$networkLinkWidth == FALSE && input$networkLinkNumber == TRUE){
+      ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
+             , size = input$networkNodeSize, palette = colors_palette, edge.label = edge_values)
+    } else if (input$networkLinkWidth == TRUE && input$networkLinkNumber == FALSE){
+      ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
+             , size = input$networkNodeSize, palette = colors_palette, edge.size = edge_size)
+    } else if (input$networkLinkWidth == FALSE && input$networkLinkNumber == FALSE){
+      ggnet2(connections, label = patient_data$patient, node.color = patient_data[,input$networkColor]
+             , size = input$networkNodeSize, palette = colors_palette)
+    }
     
   })
   
